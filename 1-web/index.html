@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>App de gestión de tareas</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="App para el curso de full Stack 23" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Josefin+Sans:ital,wght@0,100..700;1,100..700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+
+  <body>
+    <div class="header">
+      <div class="header-content">
+        <div class="header-title">
+          <h2>TO DO</h2>
+          <span class="theme-icon">&#9728;</span>
+        </div>
+
+        <div class="todo-input">
+          <input
+            class="text-input"
+            type="text"
+            id="input"
+            placeholder="Create new todo..."
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="main-container">
+      <div class="todo-card">
+        <ul class="todo-list" id="todo-list"></ul>
+        <div class="divider"></div>
+
+        <div class="card-footer">
+          <div class="items-left" id="items-left"></div>
+
+          <div class="filters">
+            <a id="filter-all" class="bottom-link">All</a>
+            <a id="filter-active" class="bottom-link">Active</a>
+            <a id="filter-completed" class="bottom-link"> Completed </a>
+          </div>
+
+          <div>
+            <a class="bottom-link" type="button" id="clear">
+              Clear Completed
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-container">
+      <p>Drag and Drop to reorder list</p>
+    </div>
+    <script src="./events.js"></script>
+  </body>
+</html>

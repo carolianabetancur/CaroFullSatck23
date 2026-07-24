@@ -42,3 +42,7 @@ var Colores;
 })(Colores || (Colores = {}));
 const colorFavorito = Colores.ROJO;
 console.log(colorFavorito);
+const numbers = [1, 2, 3, 4, 5];
+console.log(numbers);
+const numbers2 = [6, 7, 8, 9, 10];
+console.log(numbers);

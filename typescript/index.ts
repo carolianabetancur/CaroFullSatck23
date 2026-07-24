@@ -19,7 +19,7 @@ console.log(personaTsc1);
 personaTsc1.saludar();
 
 //Interfaces: se pueden asimilar a la forma en la que se crean objetos a partir de funciones, son estructuras que nos permiten
-//el cuerpo de la función o declara las funciones sin darle un cuerpo o una interpretación completa. Son moldes para reutilozar
+//tener el cuerpo de la función o declarar las funciones sin darle un cuerpo o una interpretación completa. Son moldes para reutilozar
 interface Animal {
   nombre: string;
   edad: number;
@@ -64,3 +64,9 @@ enum Colores {
 
 const colorFavorito: Colores = Colores.ROJO;
 console.log(colorFavorito);
+
+const numbers: number[] = [1, 2, 3, 4, 5];
+console.log(numbers);
+
+const numbers2: Array<number> = [6, 7, 8, 9, 10];
+console.log(numbers);
