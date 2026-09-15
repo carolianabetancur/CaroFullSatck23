@@ -1,0 +1,322 @@
+// Active: 1787364881140@@fullstackuc.kpras5g.mongodb.net@443@Libreria
+
+db('Libreria').collection('cliente').find();
+db('Libreria')
+  .collection('cliente')
+  .insertOne({
+    nombre: 'Juan',
+    apellido: 'Perez',
+    edad: 30,
+    direccion: {
+      calle: 'Calle Falsa',
+      numero: 123,
+      ciudad: 'Ciudad falsa',
+      pais: 'Pais falso',
+    },
+  });
+db('Libreria')
+  .collection('cliente')
+  .insertOne({
+    nombre: 'Camila',
+    apellido: 'Osorio',
+    edad: 28,
+    direccion: {
+      calle: 'Calle Falsa',
+      numero: 123,
+      ciudad: 'Bogota',
+      pais: 'Colombia',
+    },
+  });
+
+db('Libreria').collection('cliente').find({ 'direccion.ciudad': 'Bogota' });
+db('Libreria')
+  .collection('cliente')
+  .updateOne({ nombre: 'Camila' }, { $set: { 'direccion.numero': 456 } });
+
+//Arreglos o vectores. Mongo dentro de un documento admite arrays o vectores, es decir, un campo puede contener varios valores.
+// Por ejemplo, podemos tener un campo "telefonos" que contenga varios números de teléfono para un cliente.
+db('Libreria')
+  .collection('cliente')
+  .insertMany([
+    {
+      nombre: 'Maria',
+      apellido: 'Lopez',
+      intereses: ['lectura', 'viajes', 'deportes'],
+    },
+    {
+      nombre: 'Gabriel',
+      apellido: 'Ramirez',
+      intereses: ['musica', 'cine', 'libros'],
+    },
+  ]);
+
+db('Libreria').collection('cliente').find();
+
+// La ventaja de usar arreglos es que para insertar información podríamos hacerlo a partir de funciones.
+// Dónde push es una función para agregar nuevos elementos, al final
+db('Libreria')
+  .collection('cliente')
+  .updateOne({ nombre: 'Gabriel' }, { $push: { intereses: 'cocina' } });
+
+db('Libreria')
+  .collection('cliente')
+  .updateOne(
+    { nombre: 'Gabriel' },
+    { $push: { intereses: { $each: ['ajedrez', 'guitarra'] } } },
+  );
+db('Libreria').collection('cliente').find();
+
+db('Libreria').createCollection('productos');
+db('Libreria')
+  .collection('productos')
+  .insertMany([
+    {
+      nombre: 'Laptop',
+      categorias: ['tecnologia', 'computadoras'],
+      stock: 15,
+      precio: 1000,
+    },
+    {
+      nombre: 'Teclado',
+      categorias: ['tecnologia', 'accesorios'],
+      stock: 30,
+      precio: 25,
+    },
+    {
+      nombre: 'Mesa',
+      categorias: ['mobiliario', 'accesorios'],
+      stock: 10,
+      precio: 150,
+    },
+  ]);
+
+db('Libreria')
+  .collection('productos')
+  .updateOne({ nombre: 'Mesa' }, { $set: { 'categorias.1': 'hogar' } });
+
+db('Libreria').createCollection('ordenes');
+
+db('Libreria')
+  .collection('ordenes')
+  .insertMany([
+    {
+      cliente: 'Juan',
+      productos: [{ nombre: 'Laptop', cantidad: 1, precio: 1000 }],
+      total: 1000,
+    },
+    {
+      cliente: 'Ana',
+      productos: [{ nombre: 'Mesa', cantidad: 1, precio: 150 }],
+      total: 150,
+    },
+  ]);
+
+db('Libreria').createCollection('ventas');
+
+db('Libreria')
+  .collection('ventas')
+  .insertMany([
+    {
+      cliente: 'Juan',
+      categoria: 'tecnologia',
+      monto: 1000,
+      fecha: new Date(),
+    },
+    {
+      cliente: 'Ana',
+      categoria: 'hogar',
+      monto: 150,
+      fecha: new Date(),
+    },
+    {
+      cliente: 'Luis',
+      categoria: 'tecnologia',
+      monto: 25,
+      fecha: new Date(),
+    },
+    {
+      cliente: 'Pedro',
+      categoria: 'hogar',
+      monto: 200,
+      fecha: new Date(),
+    },
+  ]);
+
+//Ir a revisar los tipos de datos bson en notes
+//Ejemplo
+
+db.estudiante.insert({
+  nombre: 'Juan Perez',
+  edad: 20,
+  carreras: [
+    { nombre: 'Ingeniería de Sistemas', semestre: 4 },
+    { nombre: 'Matemáticas', semestre: 2 },
+  ],
+  direcciones: {
+    casa: 'calle 123',
+    universidad: 'calle 456',
+    oficina: 'calle 789',
+  },
+  matriculado: true,
+  fechaRegistro: new Date(),
+  estatura: 1.75,
+});
+
+//Es posible crear una collección con ciertas restricciones y se hace de esta forma. Cuando llegue al máximo borra los primeros documentos
+//En el validator van los tipos de datos y los campos requeridos
+
+db('Libreria').createCollection('materia', {
+  capped: true,
+  size: 100000,
+  max: 1000,
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['nombre', 'creditos', 'horario', 'profesor'],
+      properties: {
+        nombre: {
+          bsonType: 'string',
+        },
+        creditos: {
+          bsonType: 'int',
+          minimum: 1,
+          maximum: 4,
+        },
+      },
+    },
+  },
+  // validationLevel: 'strict',
+});
+
+db('Libreria').collection('materia').insertOne({
+  nombre: 'Matemáticas',
+  creditos: 2,
+  horario: 'Lunes y Miércoles 10:00-12:00',
+  profesor: 'Dr. Juan Pérez',
+});
+
+db('Libreria').collection('materia').drop();
+
+//Relaciones en Mongo db
+//Uno a uno puede ser de referencia o embebidos
+
+//Relación uno a uno con obejetos embebidos. Una materia le corresponde el objeto profesor, es uno a uno y es embebido. Lo mas normal
+//en mongo son los datos embebidos(se recomienda cuando no son muchos datos), por qué con las referencias es mas complejo
+//Mongo permite desnormalizar, ya que busca mas temas de rapidez
+db('Libreria')
+  .collection('materia')
+  .insertOne({
+    nombre: 'Matemáticas',
+    creditos: 2,
+    horario: 'Lunes y Miércoles 10:00-12:00',
+    profesor: {
+      nombre: 'Dr. Juan Pérez',
+      correo: 'juan.perez@universidad.edu',
+    },
+  });
+
+db('Libreria')
+  .collection('estudiante')
+  .insertOne({
+    nombre: 'Juan Perez',
+    edad: 20,
+    carrera: 'Ingenieria de sistemas',
+    ubicacion: {
+      ciudad: 'Bogotá',
+      pais: 'Colombia',
+      codigo_postal: '006767',
+    },
+  });
+
+//Relación uno a muchos
+db('Libreria')
+  .collection('estudiante')
+  .insertOne({
+    nombre: 'Juan Perez',
+    edad: 20,
+    carrera: 'Ingenieria de sistemas',
+    ubicacion: [
+      {
+        ciudad: 'Bogotá',
+        pais: 'Colombia',
+        codigo_postal: '006767',
+      },
+      {
+        ciudad: 'Medellin',
+        pais: 'Colombia',
+        codigo_postal: '006767',
+      },
+    ],
+  });
+
+//Uno a pocos un electrodoméstico tiene algunos atributos
+//Ejemplo: se quiere almacenar electrodomésticos (nevera, televisor, computador)
+db('Libreria')
+  .collection('electrodomesticos')
+  .insertMany([
+    {
+      nombre: 'Nevera',
+      marca: 'Samsung',
+      atributos: {
+        capacidad: '28 pies cúbicos',
+        color: 'frost-free',
+        energia: 'A++',
+      },
+    },
+    {
+      nombre: 'Televisor',
+      marca: 'Sony',
+      atributos: {
+        pulgadas: 55,
+        resolucion: '4K',
+        smart: true,
+      },
+    },
+    {
+      nombre: 'Computador',
+      marca: 'Dell',
+      atributos: {
+        procesador: 'Intel Core i7',
+        ram: '16GB',
+        almacenamiento: '512GB SSD',
+      },
+    },
+  ]);
+
+//Uno a millones, es manejado por el patrón bucket. Almaceno en pequeños cubos la info que es mucha.
+//Ejemplo: quiero conocer el registro del comportamiento de los usuarios en una plataforma educativa. Como esto se vuelve
+//insostenible, la idea es crear la estructura para que se llene automáticamente
+
+db('Libreria')
+  .collection('estudiante')
+  .insertOne({
+    nombre: 'Juan Perez',
+    edad: 20,
+    carrera: 'Ingenieria de sistemas',
+    comportamiento: [
+      {
+        hora: '10:00',
+        descripcion: 'reproduccion de video',
+      },
+      {
+        hora: '10:05',
+        descripcion: 'modulo de tareas',
+      },
+    ],
+  });
+
+//Relaciones por referncias lo podemos hacer desde Data Modeling en compass y ahí tendremos primary key, foreign y podemos tener
+//Uno a uno, uno a muchos, muchos a muchos, uno a pocos, uno a millones
+db('Libreria')
+  .collection('materia')
+  .insertOne({
+    nombre: 'Matemáticas',
+    creditos: 2,
+    horario: 'Lunes y Miércoles 10:00-12:00',
+    profesor: ObjectId('64731465432134567890abcd'),
+  });
+
+//Es posible exportar el model a json para tenerlos aquí
+
+//Tarea, entrar al cluster en los 3 puntos, low sample data, es base de datos de ejemplos, usar base da datos nflix y cargar
+//Cuando cargue con esa base de datos vamos a hacer consultas y cosas

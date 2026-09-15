@@ -1,0 +1,1278 @@
+// Active: 1787717219685@@fullstackuc.kpras5g.mongodb.net@443@TecnologyShop
+
+/*
+ARQUITECTURA FINAL - TECNOLOGYSHOP EN MONGODB
+
+Colecciones:
+1. users
+2. categories
+3. products
+4. orders
+
+RELACIONES Y ESTRATEGIA DOCUMENTAL
+
+USERS
+- Colección independiente.
+- phones: array embebido dentro del usuario.
+- addresses: array de objetos embebidos dentro del usuario.
+- Las direcciones representan el estado actual del usuario.
+
+PRODUCTS
+- Colección independiente.
+- categories: array de referencias ObjectId hacia categories._id.
+- No existe colección intermedia product_category.
+- Cada producto mantiene su estado actual: precio, stock, descripción, etc.
+
+CATEGORIES
+- Colección independiente.
+- Cada categoría tiene identidad propia.
+- categoryName posee índice unique para evitar categorías duplicadas.
+
+ORDERS
+- Colección independiente.
+- userId: referencia ObjectId hacia users._id.
+- shippingAddress: objeto embebido histórico.
+  Se copia la dirección utilizada al momento de la compra y no debe
+  modificarse aunque posteriormente cambie la dirección del usuario.
+- products/items: array de objetos embebidos históricos.
+  Cada elemento conserva:
+    productId -> referencia ObjectId hacia products._id
+    name
+    description
+    quantity
+    unitPrice
+- name, description y unitPrice se duplican intencionalmente para
+  conservar la fotografía histórica del producto comprado.
+- stock y precio actual NO se duplican porque pertenecen al estado
+  actual del producto.
+- total se conserva como dato histórico de la orden aunque pueda
+  calcularse matemáticamente.
+
+RELACIONES
+
+users 1:N orders
+orders.userId -> users._id
+
+products N:M categories
+products.categories[] -> categories._id
+No se utiliza colección product_category.
+
+orders N:M products
+Se representa mediante el array embebido products/items[] dentro de orders.
+Cada item mantiene productId como referencia al producto actual y además
+una copia histórica de los datos relevantes de la compra.
+No se utiliza colección order_product.
+
+IDEA CENTRAL DEL MODELO
+
+MongoDB no es una conversión tabla SQL -> colección MongoDB.
+
+Se referencia cuando el dato tiene vida propia y debe mantenerse independiente.
+Se embebe cuando el dato pertenece naturalmente al documento y su tamaño es acotado.
+Se duplica intencionalmente cuando es necesario conservar información histórica.
+*/
+
+// users
+//   ├── phones[]                 EMBEBIDO
+//   └── addresses[]              EMBEBIDO
+
+// categories
+//         ↑
+//         │ ObjectId
+// products
+//   └── categories[]             REFERENCIAS
+
+// users._id
+//     ↑
+//     │ ObjectId
+// orders
+//   ├── userId                   REFERENCIA
+//   ├── shippingAddress {}       EMBEBIDO HISTÓRICO
+//   └── products/items[]
+//         ├── productId ───────→ products._id   REFERENCIA
+//         ├── name               HISTÓRICO
+//         ├── description        HISTÓRICO
+//         ├── quantity           DATO DE LA COMPRA
+//         └── unitPrice          HISTÓRICO
+db('TecnologyShop');
+
+db('TecnologyShop').createCollection('users', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['name', 'email', 'password', 'phones', 'createdAt'],
+      properties: {
+        name: {
+          bsonType: 'string',
+          minLength: 1,
+          maxLength: 50,
+          description: 'debe ser un string y es obligatorio',
+        },
+        lastName: {
+          bsonType: 'string',
+          description: 'debe ser un string',
+        },
+        email: {
+          bsonType: 'string',
+          maxLength: 75,
+          description: 'debe ser un string y es obligatorio',
+        },
+        password: {
+          bsonType: 'string',
+          minLength: 8,
+          maxLength: 50,
+          description: 'debe ser un string y es obligatorio',
+        },
+        createdAt: {
+          bsonType: 'date',
+        },
+        phones: {
+          bsonType: 'array',
+          maxItems: 3,
+          items: {
+            bsonType: 'string',
+          },
+        },
+      },
+    },
+  },
+});
+
+db('TecnologyShop').command({
+  collMod: 'users',
+  validator: {
+    $and: [
+      {
+        $jsonSchema: {
+          bsonType: 'object',
+          required: [
+            'name',
+            'email',
+            'password',
+            'phones',
+            'createdAt',
+            'addresses',
+          ],
+          properties: {
+            name: {
+              bsonType: 'string',
+              minLength: 1,
+              maxLength: 50,
+            },
+            lastName: {
+              bsonType: 'string',
+            },
+            email: {
+              bsonType: 'string',
+              maxLength: 75,
+            },
+            password: {
+              bsonType: 'string',
+              minLength: 8,
+              maxLength: 50,
+            },
+            createdAt: {
+              bsonType: 'date',
+            },
+            phones: {
+              bsonType: 'array',
+              maxItems: 3,
+              items: {
+                bsonType: 'string',
+              },
+            },
+            addresses: {
+              bsonType: 'array',
+              maxItems: 4,
+              items: {
+                bsonType: 'object',
+                required: [
+                  'label',
+                  'street',
+                  'city',
+                  'state',
+                  'postalCode',
+                  'defaultShipping',
+                ],
+                properties: {
+                  label: {
+                    bsonType: 'string',
+                  },
+                  street: {
+                    bsonType: 'string',
+                  },
+                  city: {
+                    bsonType: 'string',
+                  },
+                  state: {
+                    bsonType: 'string',
+                  },
+                  postalCode: {
+                    bsonType: 'string',
+                  },
+                  defaultShipping: {
+                    bsonType: 'bool',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        $expr: {
+          $or: [
+            {
+              $eq: [{ $size: '$addresses' }, 0],
+            },
+            {
+              $eq: [
+                {
+                  $size: {
+                    $filter: {
+                      input: '$addresses',
+                      as: 'address',
+                      cond: {
+                        $eq: ['$$address.defaultShipping', true],
+                      },
+                    },
+                  },
+                },
+                1,
+              ],
+            },
+          ],
+        },
+      },
+    ],
+  },
+  validationLevel: 'strict',
+  validationAction: 'error',
+});
+
+db('TecnologyShop')
+  .collection('users')
+  .createIndex({ email: 1 }, { unique: true });
+
+db('TecnologyShop')
+  .collection('users')
+  .insertOne({
+    name: 'Wendy',
+    lastName: 'PéCallerez',
+    email: 'wendy@gmail.com',
+    password: 'wenl1234',
+    createdAt: new Date('2026-08-05 10:15:00'),
+    phones: [],
+    addresses: [],
+  });
+
+db('TecnologyShop').collection('users').find();
+
+db('TecnologyShop')
+  .collection('users')
+  .insertOne({
+    name: 'Andrés',
+    lastName: 'Castro',
+    email: 'andres@gmail.com',
+    password: 'andre456',
+    createdAt: new Date('2026-08-02 10:30:00'),
+    phones: [],
+  });
+
+db('TecnologyShop')
+  .collection('users')
+  .updateMany(
+    { addresses: { $exists: false } },
+    {
+      $set: {
+        addresses: [],
+      },
+    },
+  );
+
+//Para los precios la idea es siempre usar NumberDecimal, pero ese se usa en la terminal o en compass, aquí toca usar Decimal128
+db('TecnologyShop').createCollection('products', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['name', 'price', 'stock', 'createdAt', 'categories'],
+      properties: {
+        name: {
+          bsonType: 'string',
+          minLength: 1,
+          maxLength: 75,
+          description: 'debe ser un string y es obligatorio',
+        },
+        description: {
+          bsonType: 'string',
+          description: 'debe ser un string',
+        },
+        price: {
+          bsonType: 'double',
+          minimum: 0,
+          description: 'debe ser un decimal y es obligatorio',
+        },
+        stock: {
+          bsonType: 'int',
+          minimum: 0,
+          description: 'debe ser un entero y es obligatorio',
+        },
+        createdAt: {
+          bsonType: 'date',
+        },
+        categories: {
+          bsonType: 'array',
+          minItems: 1,
+          items: {
+            bsonType: 'objectId',
+          },
+        },
+      },
+    },
+  },
+});
+
+db('TecnologyShop').command({
+  collMod: 'products',
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['name', 'price', 'stock', 'createdAt', 'categories'],
+      properties: {
+        name: {
+          bsonType: 'string',
+          minLength: 1,
+          maxLength: 75,
+        },
+        description: {
+          bsonType: 'string',
+        },
+        price: {
+          bsonType: 'number',
+          minimum: 0,
+        },
+        stock: {
+          bsonType: 'number',
+          minimum: 0,
+          multipleOf: 1,
+        },
+        createdAt: {
+          bsonType: 'date',
+        },
+        categories: {
+          bsonType: 'array',
+          minItems: 1,
+          items: {
+            bsonType: 'objectId',
+          },
+        },
+      },
+    },
+  },
+  validationLevel: 'strict',
+  validationAction: 'error',
+});
+
+db('TecnologyShop').createCollection('categories', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: ['categoryName'],
+      properties: {
+        categoryName: {
+          bsonType: 'string',
+          minLength: 1,
+          maxLength: 50,
+          description: 'debe ser un string y es obligatorio',
+        },
+        description: {
+          bsonType: 'string',
+          description: 'debe ser un string',
+        },
+      },
+    },
+  },
+});
+
+//categoryName: 1, ese 1 significa que el índice se construye en orden ascendente sobre categoryName
+db('TecnologyShop')
+  .collection('categories')
+  .createIndex({ categoryName: 1 }, { unique: true });
+
+db('TecnologyShop').createCollection('orders', {
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: [
+        'userId',
+        'createdAt',
+        'status',
+        'total',
+        'shippingAddress',
+        'products',
+      ],
+      properties: {
+        userId: {
+          bsonType: 'objectId',
+        },
+        createdAt: {
+          bsonType: 'date',
+        },
+        status: {
+          bsonType: 'string',
+          enum: ['pending', 'paid', 'shipped', 'delivered', 'cancelled'],
+          description:
+            'Debe ser uno de los siguientes valores: pending, paid, shipped, delivered, cancelled',
+        },
+        total: {
+          bsonType: 'decimal',
+          minimum: 0,
+          description: 'debe ser un decimal y es obligatorio',
+        },
+        shippingAddress: {
+          bsonType: 'object',
+          required: ['street', 'city', 'state', 'postalCode'],
+          properties: {
+            street: {
+              bsonType: 'string',
+            },
+            city: {
+              bsonType: 'string',
+            },
+            state: {
+              bsonType: 'string',
+            },
+            postalCode: {
+              bsonType: 'string',
+            },
+          },
+        },
+        products: {
+          bsonType: 'array',
+          minItems: 1,
+          items: {
+            bsonType: 'object',
+            required: ['productId', 'name', 'quantity', 'unitPrice'],
+            properties: {
+              productId: {
+                bsonType: 'objectId',
+                description: 'debe ser un objectId y es obligatorio',
+              },
+              name: {
+                bsonType: 'string',
+                minLength: 3,
+                maxLength: 50,
+                description: 'debe ser un string y es obligatorio',
+              },
+              description: {
+                bsonType: 'string',
+                description: 'debe ser un string',
+              },
+              quantity: {
+                bsonType: 'int',
+                minimum: 1,
+                description: 'debe ser un entero y es obligatorio',
+              },
+              unitPrice: {
+                bsonType: 'decimal',
+                //Esto sería el equivalente a mayor que 0
+                exclusiveMinimum: 0,
+                description: 'debe ser un decimal y es obligatorio',
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+});
+
+//La idea base es esta: un índice sirve para que MongoDB encuentre documentos más rápido, sin tener que revisar toda la colección uno por uno.
+db('TecnologyShop')
+  .collection('orders')
+  .createIndex({ userId: 1, createdAt: -1 });
+db('TecnologyShop').collection('orders').createIndex({ status: 1 });
+db('TecnologyShop').collection('orders').createIndex({ createdAt: -1 });
+
+db('TecnologyShop').collection('orders').find({ userId: 1 });
+
+db('TecnologyShop')
+  .collection('categories')
+  .insertMany([
+    {
+      categoryName: 'Computadores',
+      description: 'Computadores portátiles y de escritorio',
+    },
+    {
+      categoryName: 'Accesorios',
+      description: 'Accesorios para computadores y dispositivos',
+    },
+    {
+      categoryName: 'Periféricos',
+      description: 'Dispositivos externos para computadores',
+    },
+    {
+      categoryName: 'Almacenamiento',
+      description: 'Dispositivos para almacenar información',
+    },
+    {
+      categoryName: 'Audio',
+      description: 'Productos relacionados con sonido',
+    },
+  ]);
+
+db('TecnologyShop').collection('categories').find({});
+
+db('TecnologyShop').collection('products');
+
+db('TecnologyShop').collection('products').find({});
+db('TecnologyShop')
+  .collection('products')
+  .deleteOne({ name: 'Producto prueba' });
+
+db('TecnologyShop')
+  .collection('products')
+  .insertMany([
+    {
+      name: 'Laptop Lenovo',
+      description: 'Laptop para trabajo y estudio',
+      price: 3200.0,
+      stock: 15,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb0'), // Computadores
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+      ],
+    },
+    {
+      name: 'Mouse Logitech',
+      description: 'Mouse inalámbrico ergonómico',
+      price: 120.0,
+      stock: 30,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb2'), // Periféricos
+      ],
+    },
+    {
+      name: 'Teclado Mecánico',
+      description: 'Teclado mecánico RGB',
+      price: 280.0,
+      stock: 20,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb2'), // Periféricos
+      ],
+    },
+    {
+      name: 'Monitor Samsung',
+      description: 'Monitor de 27 pulgadas',
+      price: 950.0,
+      stock: 12,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb0'), // Computadores
+        new ObjectId('6a91cf2726f66f3ab6e32bb2'), // Periféricos
+      ],
+    },
+    {
+      name: 'Audífonos Sony',
+      description: 'Audífonos inalámbricos',
+      price: 450.0,
+      stock: 18,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb4'), // Audio
+      ],
+    },
+    {
+      name: 'Webcam Logitech',
+      description: 'Cámara web Full HD',
+      price: 230.0,
+      stock: 25,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb2'), // Periféricos
+      ],
+    },
+    {
+      name: 'Disco SSD Kingston',
+      description: 'SSD de 1 TB',
+      price: 390.0,
+      stock: 10,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb3'), // Almacenamiento
+      ],
+    },
+    {
+      name: 'Memoria RAM Corsair',
+      description: 'Memoria RAM 16 GB',
+      price: 310.0,
+      stock: 14,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb3'), // Almacenamiento
+      ],
+    },
+    {
+      name: 'Tablet Samsung',
+      description: 'Tablet de 10 pulgadas',
+      price: 1250.0,
+      stock: 8,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb0'), // Computadores
+      ],
+    },
+    {
+      name: 'Parlante JBL',
+      description: 'Parlante Bluetooth portátil',
+      price: 360.0,
+      stock: 22,
+      createdAt: new Date(),
+      categories: [
+        new ObjectId('6a91cf2726f66f3ab6e32bb1'), // Accesorios
+        new ObjectId('6a91cf2726f66f3ab6e32bb4'), // Audio
+      ],
+    },
+  ]);
+
+db('TecnologyShop').collection('products').find({});
+
+/*
+PRODUCTOS - MAPA DE REFERENCIAS
+
+Laptop Lenovo        -> 6a91dcaf26f66f3ab6e32bbc
+Mouse Logitech       -> 6a91dcaf26f66f3ab6e32bbd
+Teclado Mecánico     -> 6a91dcaf26f66f3ab6e32bbe
+Monitor Samsung      -> 6a91dcaf26f66f3ab6e32bbf
+Audífonos Sony       -> 6a91dcaf26f66f3ab6e32bc0
+Webcam Logitech      -> 6a91dcaf26f66f3ab6e32bc1
+Disco SSD Kingston   -> 6a91dcaf26f66f3ab6e32bc2
+Memoria RAM Corsair  -> 6a91dcaf26f66f3ab6e32bc3
+Tablet Samsung       -> 6a91dcaf26f66f3ab6e32bc4
+Parlante JBL         -> 6a91dcaf26f66f3ab6e32bc5
+*/
+db('TecnologyShop').collection('users').find({});
+
+db('TecnologyShop')
+  .collection('users')
+  .insertMany([
+    {
+      name: 'Laura',
+      lastName: 'Gómez',
+      email: 'laura@gmail.com',
+      password: 'laura789',
+      createdAt: new Date('2026-08-03 14:20:00'),
+      phones: [],
+      addresses: [],
+    },
+    {
+      name: 'Nicolás',
+      lastName: 'Rodríguez',
+      email: 'nicolas@gmail.com',
+      password: 'nicolas@gmail.com',
+      createdAt: new Date('2026-08-04 08:45:00'),
+      phones: [],
+      addresses: [],
+    },
+  ]);
+
+db('TecnologyShop')
+  .collection('users')
+  .insertOne({
+    name: 'Valentina',
+    lastName: 'Martínez',
+    email: 'valentina@gmail.com',
+    password: 'vale6540',
+    createdAt: new Date('2026-08-05 16:10:00'),
+    phones: [],
+    addresses: [],
+  });
+
+/*
+USERS - MAPA DE REFERENCIAS
+
+Carolina  -> 6a8e6a84c49f893f4e930f08
+Andrés    -> 6a907b1e26f66f3ab6e32bad
+Laura     -> 6a9201e926f66f3ab6e32bc6
+Nicolás   -> 6a9201e926f66f3ab6e32bc7
+Valentina -> 6a9205371eb510ed33eb8150
+
+Wendy queda como usuario adicional de prueba.
+*/
+
+//Código para Mongosh, recordemos que ahí si se permite NumberDecimal
+db.runCommand({
+  collMod: 'orders',
+  validator: {
+    $jsonSchema: {
+      bsonType: 'object',
+      required: [
+        'userId',
+        'createdAt',
+        'status',
+        'total',
+        'shippingAddress',
+        'products',
+      ],
+      properties: {
+        userId: {
+          bsonType: 'objectId',
+        },
+        createdAt: {
+          bsonType: 'date',
+        },
+        status: {
+          bsonType: 'string',
+          enum: ['pending', 'paid', 'shipped', 'delivered', 'cancelled'],
+        },
+        total: {
+          bsonType: 'decimal',
+          minimum: NumberDecimal('0'),
+        },
+        shippingAddress: {
+          bsonType: 'object',
+          required: ['street', 'city', 'state', 'postalCode'],
+          properties: {
+            street: {
+              bsonType: 'string',
+            },
+            city: {
+              bsonType: 'string',
+            },
+            state: {
+              bsonType: 'string',
+            },
+            postalCode: {
+              bsonType: 'string',
+            },
+          },
+        },
+        products: {
+          bsonType: 'array',
+          minItems: 1,
+          items: {
+            bsonType: 'object',
+            required: ['productId', 'name', 'quantity', 'unitPrice'],
+            properties: {
+              productId: {
+                bsonType: 'objectId',
+              },
+              name: {
+                bsonType: 'string',
+                minLength: 3,
+                maxLength: 50,
+              },
+              description: {
+                bsonType: 'string',
+              },
+              quantity: {
+                bsonType: 'int',
+                minimum: 1,
+              },
+              unitPrice: {
+                bsonType: 'decimal',
+                minimum: NumberDecimal('0'),
+                exclusiveMinimum: true,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+  validationLevel: 'strict',
+  validationAction: 'error',
+});
+
+db.orders.insertOne({
+  userId: ObjectId('6a8e6a84c49f893f4e930f08'),
+  createdAt: ISODate('2026-08-06T14:30:00Z'),
+  status: 'paid',
+  total: NumberDecimal('3440.00'),
+
+  shippingAddress: {
+    street: 'Calle 10 # 20-30',
+    city: 'Medellín',
+    state: 'Antioquia',
+    postalCode: '050021',
+  },
+  products: [
+    {
+      productId: ObjectId('6a91dcaf26f66f3ab6e32bbc'),
+      name: 'Laptop Lenovo',
+      description: 'Laptop para trabajo y estudio',
+      quantity: NumberInt(1),
+      unitPrice: NumberDecimal('3200.00'),
+    },
+    {
+      productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+      name: 'Mouse Logitech',
+      description: 'Mouse inalámbrico ergonómico',
+      quantity: NumberInt(2),
+      unitPrice: NumberDecimal('120.00'),
+    },
+  ],
+});
+
+db.orders.insertMany([
+  {
+    userId: ObjectId('6a8e6a84c49f893f4e930f08'),
+    createdAt: ISODate('2026-08-07T19:20:00Z'),
+    status: 'delivered',
+    total: NumberDecimal('570.00'),
+    shippingAddress: {
+      street: 'Calle 10 # 20-30',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050021',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc0'),
+        name: 'Audífonos Sony',
+        description: 'Audífonos inalámbricos',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('450.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('120.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a907b1e26f66f3ab6e32bad'),
+    createdAt: ISODate('2026-08-07T21:45:00Z'),
+    status: 'shipped',
+    total: NumberDecimal('950.00'),
+    shippingAddress: {
+      street: 'Carrera 45 # 32-18',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050022',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbf'),
+        name: 'Monitor Samsung',
+        description: 'Monitor de 27 pulgadas',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('950.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a907b1e26f66f3ab6e32bad'),
+    createdAt: ISODate('2026-08-08T15:15:00Z'),
+    status: 'pending',
+    total: NumberDecimal('840.00'),
+    shippingAddress: {
+      street: 'Carrera 45 # 32-18',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050022',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbe'),
+        name: 'Teclado Mecánico',
+        description: 'Teclado mecánico RGB',
+        quantity: NumberInt(2),
+        unitPrice: NumberDecimal('280.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(2),
+        unitPrice: NumberDecimal('140.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9201e926f66f3ab6e32bc6'),
+    createdAt: ISODate('2026-08-08T16:30:00Z'),
+    status: 'delivered',
+    total: NumberDecimal('1280.00'),
+    shippingAddress: {
+      street: 'Calle 50 # 70-12',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050031',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc4'),
+        name: 'Tablet Samsung',
+        description: 'Tablet de 10 pulgadas',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('1250.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('30.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9201e926f66f3ab6e32bc6'),
+    createdAt: ISODate('2026-08-09T18:00:00Z'),
+    status: 'cancelled',
+    total: NumberDecimal('450.00'),
+    shippingAddress: {
+      street: 'Calle 50 # 70-12',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050031',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc0'),
+        name: 'Audífonos Sony',
+        description: 'Audífonos inalámbricos',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('450.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9201e926f66f3ab6e32bc7'),
+    createdAt: ISODate('2026-08-09T20:40:00Z'),
+    status: 'paid',
+    total: NumberDecimal('750.00'),
+    shippingAddress: {
+      street: 'Carrera 80 # 25-40',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050041',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbe'),
+        name: 'Teclado Mecánico',
+        description: 'Teclado mecánico RGB',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('280.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc0'),
+        name: 'Audífonos Sony',
+        description: 'Audífonos inalámbricos',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('450.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('20.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9201e926f66f3ab6e32bc7'),
+    createdAt: ISODate('2026-08-10T14:10:00Z'),
+    status: 'delivered',
+    total: NumberDecimal('1640.00'),
+    shippingAddress: {
+      street: 'Carrera 80 # 25-40',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050041',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc4'),
+        name: 'Tablet Samsung',
+        description: 'Tablet de 10 pulgadas',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('1250.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc1'),
+        name: 'Webcam Logitech',
+        description: 'Cámara web Full HD',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('230.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('160.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9205371eb510ed33eb8150'),
+    createdAt: ISODate('2026-08-10T17:25:00Z'),
+    status: 'shipped',
+    total: NumberDecimal('680.00'),
+    shippingAddress: {
+      street: 'Calle 30 # 55-16',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050051',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbe'),
+        name: 'Teclado Mecánico',
+        description: 'Teclado mecánico RGB',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('280.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bbd'),
+        name: 'Mouse Logitech',
+        description: 'Mouse inalámbrico ergonómico',
+        quantity: NumberInt(2),
+        unitPrice: NumberDecimal('120.00'),
+      },
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc0'),
+        name: 'Audífonos Sony',
+        description: 'Audífonos inalámbricos',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('160.00'),
+      },
+    ],
+  },
+
+  {
+    userId: ObjectId('6a9205371eb510ed33eb8150'),
+    createdAt: ISODate('2026-08-11T22:00:00Z'),
+    status: 'paid',
+    total: NumberDecimal('1250.00'),
+    shippingAddress: {
+      street: 'Calle 30 # 55-16',
+      city: 'Medellín',
+      state: 'Antioquia',
+      postalCode: '050051',
+    },
+    products: [
+      {
+        productId: ObjectId('6a91dcaf26f66f3ab6e32bc4'),
+        name: 'Tablet Samsung',
+        description: 'Tablet de 10 pulgadas',
+        quantity: NumberInt(1),
+        unitPrice: NumberDecimal('1250.00'),
+      },
+    ],
+  },
+]);
+
+//------------------------------------------------------------------------------------------------------
+
+//“Pproductos cuyo precio sea mayor a 400.”
+db('TecnologyShop')
+  .collection('products')
+  .find({ price: { $gt: 400 } }, { name: 1, price: 1, stock: 1, _id: 0 });
+
+//“Quiero productos cuyo precio sea mayor o igual a 300 Y cuyo stock sea menor o igual a 15.”
+db('TecnologyShop')
+  .collection('products')
+  .find(
+    { price: { $gte: 300 }, stock: { $lte: 15 } },
+    { name: 1, price: 1, stock: 1, _id: 0 },
+  );
+
+//“Quiero pedidos que estén pending O cancelled.”
+db('TecnologyShop')
+  .collection('orders')
+  .find(
+    {
+      $or: [
+        {
+          status: 'pending',
+        },
+        {
+          status: 'cancelled',
+        },
+      ],
+    },
+    {
+      status: 1,
+      total: 1,
+      createdAt: 1,
+      _id: 0,
+    },
+  );
+
+//Traer órdenes con total mayor a 700, ordenarlas de mayor a menor por total y mostrar solo status, total y createdAt.
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    { $match: { total: { $gt: 700 } } },
+    { $sort: { total: -1 } },
+    { $project: { status: 1, total: 1, createdAt: 1, _id: 0 } },
+  ]);
+
+//“¿Cuántas órdenes tenemos por cada estado?”
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    {
+      $group: { _id: '$status', cantidad: { $sum: 1 } },
+    },
+    { $sort: { cantidad: -1 } },
+    { $project: { _id: 0, estado: '$_id', cantidad: 1 } },
+  ]);
+
+//Quiero ver cada producto vendido como una fila independiente, aunque originalmente esté dentro del array products
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    { $unwind: '$products' },
+    {
+      $project: {
+        _id: 0,
+        'products.name': 1,
+        'products.quantity': 1,
+        'products.unitPrice': 1,
+        status: 1,
+      },
+    },
+  ]);
+
+//¿Cuántas unidades se han vendido de cada producto en todas las órdenes?
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    { $unwind: '$products' },
+    {
+      $group: {
+        _id: '$sproducts.name',
+        totalUnidades: { $sum: '$products.quantity' },
+      },
+    },
+    { $sort: { totalUnidades: -1 } },
+    {
+      $project: { _id: 0, producto: '$_id', totalUnidades: 1 },
+    },
+  ]);
+
+//¿Cuánto dinero se ha vendido por cada producto?”
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    { $unwind: '$products' },
+    {
+      $group: {
+        _id: '$products.name',
+        totalSold: {
+          $sum: {
+            $multiply: ['$products.quantity', '$products.unitPrice'],
+          },
+        },
+      },
+    },
+    { $sort: { totalSold: -1 } },
+    {
+      $project: { _id: 0, producto: '$_id', totalSold: 1 },
+    },
+  ]);
+
+//¿Cuánto dinero ha comprado cada usuario?
+// agrupa todas las órdenes del mismo userId;
+// suma todos los total;
+// para name, toma el primer nombre encontrado dentro de ese grupo;
+// para lastName, toma el primer apellido encontrado.
+// ¿Por qué sirve aquí? Porque todas las órdenes de un mismo userId deberían corresponder al mismo usuario, así que el nombre será el mismo en todas.
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'userData',
+      },
+    },
+    { $unwind: '$userData' },
+    {
+      $group: {
+        _id: '$userId',
+        name: { $first: '$userData.name' },
+        lastName: { $first: '$userData.lastName' },
+        totalPurchased: { $sum: '$total' },
+      },
+    },
+    { $sort: { totalPurchased: -1 } },
+    {
+      $project: {
+        _id: 0,
+        name: 1,
+        lastName: 1,
+        totalPurchased: 1,
+      },
+    },
+  ]);
+
+//¿Cuánto ha comprado cada usuario, pero contando solo órdenes paid o delivered?
+db('TecnologyShop')
+  .collection('orders')
+  .aggregate([
+    {
+      $match: {
+        status: { $in: ['paid', 'delivered'] },
+      },
+    },
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'userId',
+        foreignField: '_id',
+        as: 'userData',
+      },
+    },
+    {
+      $unwind: '$userData',
+    },
+    {
+      $group: {
+        _id: '$userId',
+        name: { $first: '$userData.name' },
+        lastName: { $first: '$userData.lastName' },
+        totalPurchased: { $sum: '$total' },
+      },
+    },
+    {
+      $sort: {
+        totalPurchased: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        name: 1,
+        lastName: 1,
+        totalPurchased: 1,
+      },
+    },
+  ]);

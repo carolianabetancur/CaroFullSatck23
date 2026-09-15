@@ -1,0 +1,212 @@
+//Operadores en mongo DB
+
+//Operadores relacionales: se trabajan con este signo $ y los operadores siempre tienen que estar envueltos en un objeto
+// $eq: igual a
+// $ne: diferente a
+// $gt: mayor que
+// $gte: mayor o igual que
+// $lt: menor que
+// $lte: menor o igual que
+
+//Operadores Booleanos
+//$and y $or reciben arrays de condiciones; $not normalmente se aplica directamente sobre una condición
+// $or: o
+// $and: y
+// $not: negación
+
+//Operadores aritméticos
+// $add: suma
+// $subtract: resta
+// $multiply: multiplica
+// $divide: divide
+// $mod: módulo
+
+db(sample_mflix);
+
+// Buscar todos los documentos de la colección Users
+db.users.find();
+db.users.findOne(); // Permite buscar el primero
+db.users.findOne({ name: 'Ned Stark' });
+db.users.findOne({ name: 'Ned Stark', email: 'sean_bean@gameofthron.es' });
+db.users.findOne({ _id: ObjectId('59b99db4cfa9a34dcd7885b6') });
+db.users.findOne({ name: 'Ned Stark' }).email;
+//Busqueda por etapas, busque el nombre, cuando lo encuentre solo muestre el correo por eso 1 y no mueste _id por eso 0.
+
+// Esto se conoce como una proyección
+db.users.findOne({ name: 'Ned Stark' }, { email: 1, _id: 0 });
+db.movies.find({}, { _id: 0, title: 1, languages: 1 });
+
+db.movies.find({ 'imdb.rating': { $gt: 8 } });
+db.movies.find({ 'imdb.rating': { $eq: 8 } });
+// Películas con ranking > 8
+db.movies.find(
+  { 'imdb.rating': { $gt: 8 } },
+  { title: 1, 'imdb.rating': 1, _id: 0 },
+);
+
+//Buscar películas de drama o terror. $in las películas cuyo género esten en drama u horror
+db.movies.find(
+  { genres: { $in: ['Drama', 'Horror'] } },
+  { title: 1, genres: 1, _id: 0 },
+);
+db.movies.find({ genres: { $eq: 'Drama' } }, { title: 1, genres: 1, _id: 0 });
+
+db.movies.find({}, { title: 1, genres: 1, _id: 0 });
+
+//Ejemplos con operadores booleanos. Todos los operadores booleanos son arrays, para poder comparar un objeto con otro
+//$and y $or reciben arrays de condiciones; $not normalmente se aplica directamente sobre una condición, por ejemplo:
+//{ total: { $not: { $gt: NumberDecimal("1000") } } }
+
+db.movies.find(
+  { $and: [{ genres: { $eq: 'Drama' } }, { 'imdb.rating': { $gt: 8 } }] },
+  { title: 1, genres: 1, 'imdb.rating': 1, _id: 0 },
+);
+//Peliculas que que no tengan valoración > 8
+db.movies.find(
+  { 'imdb.rating': { $not: { $gt: 8 } } },
+  { title: 1, genres: 1, 'imdb.rating': 1, _id: 0 },
+);
+
+// Recordar que el primer parámetro es el filtro, el segundo es lo que vamos a hacer o a mostrar
+db.movies.find(
+  {},
+  {
+    title: 1,
+    genres: 1,
+    'imdb.rating': 1,
+    _id: 0,
+    Saludo: 'Proyección con operador suma',
+    valoracion: { $add: ['$imdb.rating', 1] },
+    ratingPor2: { $multiply: ['$imdb.rating', 2] },
+  },
+);
+//Recordar también que que al usar operadores se debe empaquetar en un {}
+db.movies.find(
+  {},
+  {
+    _id: 0,
+    title: 1,
+    'imdb.rating': 1,
+    saludo: 'hola, ejemplo de proyección con operador suma',
+    ratingMasUno: { $add: ['$imdb.rating', 1] },
+    ratingMenosUno: { $subtract: ['$imdb.rating', 1] },
+    ratingPorDos: { $multiply: ['$imdb.rating', 2] },
+  },
+);
+
+// Inserción de un documento en la colección Users
+db.users.insertOne({ name: 'Juan' });
+
+//Consultas de agregación son como los joins pero aquí
+//FRAMEWORK O API AGREGATIONS, Entra el concepto de pipeline que es hacer cosas por etapas, desde el compass tenemos los agregations
+db.movies.find({
+  year: { $gte: 1990 },
+});
+
+//$match me sirve para hacer un filtro, o sea las cosas que hagan match entre ellas, sort -1 lo ordena de forma descendente
+//este pipline tiene 3 etapas, la primera es el filtro, la segunda el ordenamiento y la tercera la proyección
+db.movies.aggregate([
+  { $match: { year: { $gte: 1990 } } },
+  { $sort: { year: -1 } },
+  { $project: { title: 1, year: 1, _id: 0 } },
+  { $limit: 5 },
+]);
+
+//Aquí vamos a ver los grupos, equivalente a group by. Los filtros se muestran de primero, le decimos por que2 item va a
+//agrupar, en este caso por año, y cuando encuentre un año en comuń, va a contar de a sumar uno, entonces va a sumar
+// las peļícular del 2000
+db.movies.aggregate([
+  {
+    $group: {
+      _id: '$year',
+      cantidadPeliculas: { $sum: 1 },
+    },
+  },
+  {
+    $sort: { cantidadPeliculas: -1 },
+  },
+  {
+    $limit: 1,
+  },
+]);
+
+db.movies.countDocuments({
+  year: { $gte: 1990 },
+});
+
+db.movies.aggregate([
+  {
+    $group: {
+      _id: null,
+      promedioTiempoMinutos: { $avg: '$runtime' },
+    },
+  },
+]);
+
+db.movies.aggregate([
+  {
+    $group: {
+      _id: null,
+      peliculaMasCorta: { $min: '$runtime' },
+      peliculaMasLarga: { $max: '$runtime' },
+    },
+  },
+]);
+
+//Desempaquetador de objetos unwind
+
+db.movies.aggregate([
+  {
+    $unwind: '$genres',
+  },
+  {
+    $limit: 5,
+  },
+  {
+    $project: {
+      title: 1,
+
+      genres: 1,
+    },
+  },
+]);
+
+//Los lookup son los equivalentes a los Joins y tienene varias propiedades. recibe un objeto que tiene varios parámetros:
+// from: collection objetivo o sea como la "tabla" de referencia,
+// localField: campo local de la consulta obejtivo,
+// foreignField: campo foreign sería el del otra,
+// as: Nombre de los resultados
+
+//Muestra todos los datos de las pelis  y va a crear un nuevo objeto con esos comentarios
+
+db.movies.aggregate([
+  {
+    $lookup: {
+      from: 'comments',
+      localField: '_id',
+      foreignField: 'movie_id',
+      as: 'movie comments',
+    },
+  },
+]);
+
+db.movies.aggregate([
+  {
+    $lookup: {
+      from: 'comments',
+      localField: '_id',
+      foreignField: 'movie_id',
+      as: 'ComentariosPeliculas',
+    },
+  },
+  {
+    $unwind: '$ComentariosPeliculas',
+  },
+  {
+    $project: {
+      _id: 0,
+      title: 1,
+      ComentariosPeliculas: 1,
+    },
+  },
+]);

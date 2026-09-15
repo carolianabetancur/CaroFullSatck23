@@ -1,0 +1,38 @@
+// Las agregaciones en mongo son como API dentro de mongo para hacer diferentes consuotas, transformaciones y calculos
+//Vamos a hacer la consulta que podríamos hacer con find, pero con la función de agregación
+//El aggregate me va a permitir poner funciones de agregación, tenemos 2 objetos, el primero contiene el operador y el segundo el filtro
+db('Libreria')
+  .collection('ventas')
+  .aggregate([{ $match: { categoria: 'tecnologia' } }]);
+
+//Cuanto se ha vendido por categoria, se usan las agrupaciones de esta manera  $group: { _id: '$categoria'} donde el principal es la categoria
+db('Libreria')
+  .collection('ventas')
+  .aggregate([
+    { $group: { _id: '$categoria', total_ventas: { $sum: '$monto' } } },
+  ]);
+
+// Funciones de agregación para organizar asc 1, desc -1
+db('Libreria')
+  .collection('ventas')
+  .aggregate([{ $sort: { monto: -1 } }]);
+
+// Si quisiera sacar el iba, o sea multiplicando por 0.19. Usamos $project que permite transformar elementos dentro de mongo
+//Los atributos que quiero que deje tal cual están le pongo 0 y puedo agregar un nuevo atributo como IVA
+db('Libreria')
+  .collection('ventas')
+  .aggregate([
+    {
+      $project: {
+        _id: 0,
+        categoria: 1,
+        iva: { $multiply: ['$monto', 0.19] },
+      },
+    },
+  ]);
+
+// Como en algunas colecciones puedo tener arreglos para relacionar ciertos elementos en mongo y con funciones de agregación,
+// puedo desempaquetarlos para que se comporten como colecciones a parte
+db('Libreria')
+  .collection('ordenes')
+  .aggregate([{ $unwind: '$productos' }]);

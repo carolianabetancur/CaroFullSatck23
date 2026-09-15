@@ -1,0 +1,27 @@
+{
+  "name": "modulosterceros",
+  "version": "1.0.0",
+  "description": "Ejemplos de modulos de terceros",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "test"
+  },
+  "keywords": [
+    "nodeJs",
+    "js",
+    "Fullstack"
+  ],
+  "author": "Carolina",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "mongodb": "^7.6.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
+  }
+}
