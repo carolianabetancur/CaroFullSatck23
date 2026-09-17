@@ -1,0 +1,39 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+//@id indica que es la llave primaria
+model book{
+id Int @id @default(autoincrement())
+name String
+year Int
+}
+
+model author{
+id Int @id @default(autoincrement())
+name String
+correo String
+}
+
+model user{
+id Int @id @default(autoincrement())
+name String
+correo String
+password String
+}
+
+//Hacer npx prisma migrate
+//npx prisma migrate dev --name init
+//Para probarlo npx prisma studio
+//npx prisma generate para crear un cliente y conectar los servicios
