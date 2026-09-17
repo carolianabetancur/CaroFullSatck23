@@ -1,8 +1,8 @@
 // Controlador tiene la responsabilidad de llamar a un servicio
 import tareasServicio from '../servicios/tareasServicio.js';
 
-const obtenerTareas = (req, res) => {
-  const datos = tareasServicio.obtenerTareas();
+const obtenerTareas = async (req, res) => {
+  const datos = await tareasServicio.obtenerTareas();
   res.status(200).json(datos);
 };
 

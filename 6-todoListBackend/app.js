@@ -1,5 +1,7 @@
 import express from 'express';
 import tareasRutas from './rutas/tareasRutas.js';
+import usuariosRutas from './rutas/usuariosRutas.js';
+import 'dotenv/config';
 
 const app = express();
 
@@ -7,6 +9,7 @@ const app = express();
 
 app.use(express.json());
 app.use('/tareas', tareasRutas);
+app.use('/usuarios', usuariosRutas);
 
 //Aquí montamos nuestro servidor
 app.listen(3000, () => console.log('Servidor corriendo en puerto 3000'));
