@@ -7,6 +7,8 @@ const obtenerTareas = async (req, res) => {
 };
 
 const crearTarea = (req, res) => {
+  const userId = req.email.id;
+  req.body.userId = userId;
   const datos = tareasServicio.crearTarea(req.body);
   res.status(201).json(datos);
 };

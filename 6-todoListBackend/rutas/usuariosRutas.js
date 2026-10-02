@@ -1,12 +1,22 @@
 import Router from 'express';
+import validateToken from '../middleware/validateToken.js';
 import usuariosControlador from '../controladores/usuariosControlador.js';
 
 const route = Router();
 
 route
-  .get('/', usuariosControlador.getUserController)
+  .get('/', validateToken.validateToken, usuariosControlador.getUserController)
   .post('/', usuariosControlador.postUserController)
-  .put('/:id', usuariosControlador.updateUserController)
-  .delete('/:id', usuariosControlador.deleteUserController);
+  .post('/login', usuariosControlador.loginController)
+  .put(
+    '/:id',
+    validateToken.validateToken,
+    usuariosControlador.updateUserController,
+  )
+  .delete(
+    '/:id',
+    validateToken.validateToken,
+    usuariosControlador.deleteUserController,
+  );
 
 export default route;

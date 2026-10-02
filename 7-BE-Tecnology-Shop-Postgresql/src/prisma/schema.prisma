@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(50)
+  lastName  String?  @db.VarChar(50)
+  email     String   @unique @db.VarChar(75)
+  password  String   @db.VarChar(50)
+  createdAt DateTime @default(now())
+  orders    Order[]
+
+  @@map("users")
+}
+
+model Product {
+  id                Int               @id @default(autoincrement())
+  productName       String            @map("product_name") @db.VarChar(50)
+  description       String?
+  price             Decimal
+  stock             Int
+  createdAt         DateTime          @default(now()) @map("created_at")
+  orderProducts     OrderProduct[]
+  productCategories ProductCategory[]
+
+  @@map("product")
+}
+
+model Category {
+  id                Int               @id @default(autoincrement())
+  categoryName      String            @map("category_name") @db.VarChar(100)
+  description       String?
+  productCategories ProductCategory[]
+
+  @@map("category")
+}
+
+model Order {
+  id            Int            @id @default(autoincrement())
+  createdAt     DateTime       @default(now()) @map("created_at")
+  status        OrderStatus
+  total         Decimal
+  idUser        Int            @map("id_user")
+  orderProducts OrderProduct[]
+  user          User           @relation(fields: [idUser], references: [id])
+
+  @@map("orders")
+}
+
+model ProductCategory {
+  idProduct  Int      @map("id_product")
+  idCategory Int      @map("id_category")
+  category   Category @relation(fields: [idCategory], references: [id])
+  product    Product  @relation(fields: [idProduct], references: [id])
+
+  @@id([idProduct, idCategory])
+  @@map("product_category")
+}
+
+model OrderProduct {
+  idOrder       Int     @map("id_order")
+  idProduct     Int     @map("id_product")
+  productAmount Int     @map("product_amount")
+  unitPrice     Decimal @map("unit_price")
+  order         Order   @relation(fields: [idOrder], references: [id])
+  product       Product @relation(fields: [idProduct], references: [id])
+
+  @@id([idOrder, idProduct])
+  @@map("order_product")
+}
+
+enum OrderStatus {
+  pending
+  paid
+  shipped
+  delivered
+  cancelled
+}

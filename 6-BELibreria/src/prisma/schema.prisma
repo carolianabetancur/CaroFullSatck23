@@ -23,13 +23,12 @@ year Int
 model author{
 id Int @id @default(autoincrement())
 name String
-correo String
+email String
 }
 
 model user{
 id Int @id @default(autoincrement())
-name String
-correo String
+email String
 password String
 }
 

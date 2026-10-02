@@ -3,6 +3,7 @@
 //Vamos a usar un middleware de ruta: O sea el archivo index va a dectectar el recurso que quiero obtener y decidir la ruta
 
 import { Router } from 'express';
+import validateToken from '../middleware/validateToken.js';
 import tareasControlador from '../controladores/tareasControlador.js';
 
 //Podemos hacer esto de manera concatenada algo así:
@@ -10,6 +11,7 @@ import tareasControlador from '../controladores/tareasControlador.js';
 //http://127.0.0.1:3000/tareas/tareas, entonces aquî podemos borrar el tareas de la ruta
 
 const ruta = Router();
+ruta.use(validateToken.validateToken);
 
 ruta
   .get('/', tareasControlador.obtenerTareas)

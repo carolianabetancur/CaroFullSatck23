@@ -24,9 +24,16 @@ const deleteUserController = async (req, res) => {
   res.status(200).json(data);
 };
 
+const loginController = async (req, res) => {
+  const { email, password } = req.body;
+  const data = await usuariosServicio.loginService(email, password);
+  res.status(201).json(data);
+};
+
 export default {
   getUserController,
   postUserController,
   updateUserController,
   deleteUserController,
+  loginController,
 };

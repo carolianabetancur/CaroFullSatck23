@@ -8,7 +8,10 @@ const getAuthorsService = async () => {
 };
 const postAuthorsService = async (body) => {
   const query = await prisma.author.create({
-    data: body,
+    data: {
+      name: body.name,
+      email: body.email,
+    },
   });
   return query;
 };
@@ -17,7 +20,10 @@ const putAuthorsService = async (body, id) => {
     where: {
       id: Number(id),
     },
-    data: body,
+    data: {
+      name: body.name,
+      email: body.email,
+    },
   });
   return query;
 };
