@@ -1,9 +1,11 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../config/prisma.js';
 
 const getAuthorsService = async () => {
-  const query = await prisma.author.findMany();
+  const query = await prisma.author.findMany({
+    orderBy: {
+      id: 'asc',
+    },
+  });
   return query;
 };
 const postAuthorsService = async (body) => {

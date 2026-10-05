@@ -1,10 +1,11 @@
-// inicializar en src un proyecto prisma con npx prisma init
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../config/prisma.js';
 
 const getBookService = async () => {
-  const query = await prisma.book.findMany();
+  const query = await prisma.book.findMany({
+    orderBy: {
+      id: 'asc',
+    },
+  });
   return query;
 };
 const postBookService = async (body) => {
